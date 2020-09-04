@@ -116,6 +116,28 @@ public struct CredentialsManager {
                 }
             }
     }
+    
+    public func revoke(headers: [String: String]?,  callback: @escaping (CredentialsManagerError?) -> Void) {
+        guard
+            let data = self.storage.data(forKey: self.storeKey),
+            let credentials = NSKeyedUnarchiver.unarchiveObject(with: data) as? Credentials,
+            let refreshToken = credentials.refreshToken else {
+                _ = self.clear()
+                return callback(nil)
+        }
+
+        self.authentication
+            .revoke(refreshToken: refreshToken, headers: headers)
+            .start { result in
+                switch result {
+                case .failure(let error):
+                    callback(CredentialsManagerError.revokeFailed(error))
+                case .success:
+                    _ = self.clear()
+                    callback(nil)
+                }
+            }
+    }
 
     /// Checks if a non-expired set of credentials are stored
     ///
@@ -161,6 +183,21 @@ public struct CredentialsManager {
             self.retrieveCredentials(withScope: scope, callback: callback)
         }
     }
+    
+    public func credentials(withScope scope: String? = nil, headers: [String: String]? = nil, callback: @escaping (CredentialsManagerError?, Credentials?) -> Void) {
+        guard self.hasValid() else { return callback(.noCredentials, nil) }
+        if let bioAuth = self.bioAuth {
+            guard bioAuth.available else { return callback(.touchFailed(LAError(LAError.touchIDNotAvailable)), nil) }
+            bioAuth.validateBiometric {
+                guard $0 == nil else {
+                    return callback(.touchFailed($0!), nil)
+                }
+                self.retrieveCredentials(withScope: scope, headers: headers,  callback: callback)
+            }
+        } else {
+            self.retrieveCredentials(withScope: scope, headers: headers, callback: callback)
+        }
+    }
     #else
     public func credentials(withScope scope: String? = nil, callback: @escaping (CredentialsManagerError?, Credentials?) -> Void) {
         guard self.hasValid() else { return callback(.noCredentials, nil) }
@@ -178,6 +215,32 @@ public struct CredentialsManager {
         guard let refreshToken = credentials.refreshToken else { return callback(.noRefreshToken, nil) }
 
         self.authentication.renew(withRefreshToken: refreshToken, scope: scope).start {
+            switch $0 {
+            case .success(let credentials):
+                let newCredentials = Credentials(accessToken: credentials.accessToken,
+                                                 tokenType: credentials.tokenType,
+                                                 idToken: credentials.idToken,
+                                                 refreshToken: refreshToken,
+                                                 expiresIn: credentials.expiresIn,
+                                                 scope: credentials.scope)
+                _ = self.store(credentials: newCredentials)
+                callback(nil, newCredentials)
+            case .failure(let error):
+                callback(.failedRefresh(error), nil)
+            }
+        }
+    }
+    
+    private func retrieveCredentials(withScope scope: String? = nil, headers: [String: String]? = nil, callback: @escaping (CredentialsManagerError?, Credentials?) -> Void) {
+        guard
+            let data = self.storage.data(forKey: self.storeKey),
+            let credentials = NSKeyedUnarchiver.unarchiveObject(with: data) as? Credentials
+            else { return callback(.noCredentials, nil) }
+        guard credentials.expiresIn != nil else { return callback(.noCredentials, nil) }
+        guard self.hasExpired(credentials) else { return callback(nil, credentials) }
+        guard let refreshToken = credentials.refreshToken else { return callback(.noRefreshToken, nil) }
+        
+        self.authentication.renew(withRefreshToken: refreshToken, scope: scope, headers: headers).start {
             switch $0 {
             case .success(let credentials):
                 let newCredentials = Credentials(accessToken: credentials.accessToken,
