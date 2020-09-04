@@ -176,6 +176,62 @@ public protocol Authentication: Trackable, Loggable {
     @available(*, deprecated, message: "see login(usernameOrEmail username:, password:, realm:, audience:, scope:)")
     // swiftlint:disable:next function_parameter_count
     func login(usernameOrEmail username: String, password: String, multifactorCode: String?, connection: String, scope: String, parameters: [String: Any]) -> Request<Credentials, AuthenticationError>
+    
+    
+    /**
+    Logs in an user using email|username and password using a Database and Passwordless connection
+
+    ```
+    Auth0
+       .authentication(clientId: clientId, domain: "samples.auth0.com")
+       .login(usernameOrEmail: "support@auth0.com", password: "a secret password", connection: "Username-Password-Authentication")
+       .start { result in
+           switch result {
+           case .Success(let credentials):
+               print(credentials)
+           case .Failure(let error):
+               print(error)
+           }
+       }
+    ```
+
+    you can also specify scope and additional parameters
+
+    ```
+    Auth0
+       .authentication(clientId: clientId, domain: "samples.auth0.com")
+       .login(usernameOrEmail: "support@auth0.com", password:  "a secret password", connection: "Username-Password-Authentication", scope: "openid email", parameters: ["state": "a random state"])
+       .start { print($0) }
+    ```
+
+    for passwordless connections
+
+    ```
+    Auth0
+       .authentication(clientId: clientId, domain: "samples.auth0.com")
+       .login(usernameOrEmail: "+4599134762367", password: "123456", connection: "sms", scope: "openid email", parameters: ["state": "a random state"])
+       .start { print($0) }
+    ```
+
+    Also some enterprise connections, like Active Directory (AD), allows authentication using username/password without using the web flow.
+
+    When result is `.success`, its associated value will be a`Credentials` object containing at least an `access_token` (depending on the scopes used to authenticate)
+
+    - parameter usernameOrEmail:   username or email used of the user to authenticate, e.g. in email in Database connections or phone number for SMS connections.
+    - parameter password:          password of the user or one time password (OTP) for passwordless connection users
+    - parameter multifactorCode:   multifactor code if the user has enrolled one. e.g. Guardian. By default is `nil` and no code is sent.
+    - parameter connection:        name of any of your configured database or passwordless connections
+    - parameter scope:             scope value requested when authenticating the user. Default is 'openid'
+    - parameter parameters:        additional parameters that are optionally sent with the authentication request
+     - parameter headers:        additional headers that are optionally sent with the authentication request
+
+    - returns: authentication request that will yield Auth0 User Credentials
+    - seeAlso: Credentials
+    - warning: this method is deprecated in favor of `login(usernameOrEmail username:, password:, realm:, audience:, scope:)` for Database connections. For Passwordless connections use `login(email:, code:, audience:, scope:, parameters:)` or `login(phoneNumber:, code:, audience:, scope:, parameters:)` instead.
+    - requires: Legacy Grant `http://auth0.com/oauth/legacy/grant-type/ro`. Check [our documentation](https://auth0.com/docs/clients/client-grant-types) for more info and how to enable it.
+    */
+
+    func login(usernameOrEmail username: String, password: String, realm: String, audience: String?, scope: String?, parameters: [String: Any]?, headers: [String: String]?) -> Request<Credentials, AuthenticationError>
 
     /**
      Login using username and password in a realm.

@@ -93,6 +93,31 @@ struct Auth0Authentication: Authentication {
                        logger: self.logger,
                        telemetry: self.telemetry)
     }
+    
+    // swiftlint:disable:next function_parameter_count
+    func login(usernameOrEmail username: String, password: String, realm: String, audience: String?, scope: String?, parameters: [String: Any]?, headers: [String: String]?) -> Request<Credentials, AuthenticationError> {
+           let resourceOwner = URL(string: "/oauth/token", relativeTo: self.url)!
+           var payload: [String: Any] = [
+               "username": username,
+               "password": password,
+               "grant_type": "http://auth0.com/oauth/grant-type/password-realm",
+               "client_id": self.clientId,
+               "realm": realm
+               ]
+           payload["audience"] = audience
+           payload["scope"] = scope
+           if let parameters = parameters {
+               parameters.forEach { key, value in payload[key] = value }
+           }
+           return Request(session: session,
+                          url: resourceOwner,
+                          method: "POST",
+                          handle: authenticationObject,
+                          payload: payload,
+                          headers: headers ?? [:],
+                          logger: self.logger,
+                          telemetry: self.telemetry)
+       }
 
     func loginDefaultDirectory(withUsername username: String, password: String, audience: String? = nil, scope: String? = nil, parameters: [String: Any]? = nil) -> Request<Credentials, AuthenticationError> {
         let resourceOwner = URL(string: "/oauth/token", relativeTo: self.url)!
